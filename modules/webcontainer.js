@@ -129,13 +129,36 @@ async function startDevServer() {
 }
 
 async function drainOutput(proc) {
+  if (!proc?.output || typeof proc.output.getReader !== 'function') return;
+
   const reader = proc.output.getReader();
   const decoder = new TextDecoder();
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    const text = decoder.decode(value);
-    console.log(text);
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value == null) continue;
+
+      let text = '';
+      if (
+        value instanceof Uint8Array ||
+        value instanceof ArrayBuffer ||
+        (typeof ArrayBuffer !== 'undefined' && ArrayBuffer.isView && ArrayBuffer.isView(value))
+      ) {
+        text = decoder.decode(value);
+      } else {
+        text = String(value);
+      }
+
+      console.log(text);
+    }
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch (_) {
+      // ignore
+    }
   }
 }
 

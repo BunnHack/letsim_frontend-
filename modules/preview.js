@@ -1,12 +1,26 @@
 let previewFrameElement;
+let consoleOutputElement;
+let consolePanelElement;
+let consoleToggleButton;
 
 /**
  * Initialize the preview pane with a simple default page.
  */
 export function initializePreview() {
     previewFrameElement = document.getElementById('preview-frame');
+    consoleOutputElement = document.getElementById('console-output');
+    consolePanelElement = document.getElementById('console-panel');
+    consoleToggleButton = document.getElementById('console-toggle-btn');
+
     if (previewFrameElement) {
         setPreviewContent(defaultHtmlContent);
+    }
+
+    if (consoleToggleButton && consolePanelElement) {
+        consoleToggleButton.addEventListener('click', () => {
+            consolePanelElement.classList.toggle('open');
+            consoleToggleButton.classList.toggle('active');
+        });
     }
 }
 
@@ -20,6 +34,25 @@ export function setPreviewContent(html) {
     if (previewFrameElement) {
         previewFrameElement.srcdoc = html;
     }
+}
+
+export function appendToConsole(text) {
+    if (!text) return;
+
+    if (!consoleOutputElement) {
+        consoleOutputElement = document.getElementById('console-output');
+    }
+    const target = consoleOutputElement;
+    if (!target) return;
+
+    const value = String(text);
+    target.textContent += value;
+    if (!value.endsWith('\n')) {
+        target.textContent += '\n';
+    }
+
+    const container = target.parentElement || target;
+    container.scrollTop = container.scrollHeight;
 }
 
 const defaultHtmlContent = `

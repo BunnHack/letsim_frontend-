@@ -1,5 +1,6 @@
 import { WebContainer } from '@webcontainer/api';
 import { getAllFiles, getFileContent, hasFile } from './store.js';
+import { appendToConsole } from './preview.js';
 
 let webcontainerInstance = null;
 let devProcess = null;
@@ -152,6 +153,7 @@ async function drainOutput(proc) {
       }
 
       console.log(text);
+      appendToConsole(text);
     }
   } finally {
     try {

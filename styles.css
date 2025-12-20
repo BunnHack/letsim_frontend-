@@ -833,6 +833,17 @@ body {
     height: 100%;
 }
 
+/* Ensure xterm.js text renders with correct monospace spacing */
+.xterm,
+.xterm * {
+    font-family: 'JetBrains Mono', 'Fira Code', Menlo, Monaco, 'Courier New', monospace !important;
+    letter-spacing: 0 !important;
+}
+
+.xterm .xterm-rows {
+    line-height: 1 !important;
+}
+
 .content-display-area {
     flex: 1;
     background-color: #1e1e1e;

@@ -17,7 +17,9 @@ function ensureTerminal() {
     terminalInstance = new Terminal({
         convertEol: true,
         fontSize: 12,
-        fontFamily: "Menlo, Monaco, 'Courier New', monospace",
+        fontFamily: "JetBrains Mono, Fira Code, Menlo, Monaco, 'Courier New', monospace",
+        letterSpacing: 0,
+        lineHeight: 1,
         theme: {
             background: '#000000',
             foreground: '#e5e7eb',
@@ -73,12 +75,15 @@ export function setPreviewContent(html) {
 }
 
 export function appendToConsole(text) {
-    if (!text) return;
+    if (text == null) return;
 
     ensureTerminal();
     if (!terminalInstance) return;
 
-    terminalInstance.write(String(text));
+    const safe = String(text).replace(/\u0000/g, '');
+    if (!safe) return;
+
+    terminalInstance.write(safe);
 }
 
 const defaultHtmlContent = `

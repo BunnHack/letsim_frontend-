@@ -43,8 +43,25 @@ export function setPreviewContent(html) {
     }
 }
 
+function normalizeConsoleText(input) {
+    if (!input) return '';
+    let value = String(input);
+
+    // Strip ANSI escape sequences like "\x1B[1G", "\x1B[0K", etc.
+    value = value.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '');
+
+    // Handle carriage returns by keeping only the last segment on the line
+    if (value.includes('\r')) {
+        const segments = value.split('\r');
+        value = segments[segments.length - 1];
+    }
+
+    return value;
+}
+
 export function appendToConsole(text) {
-    if (!text) return;
+    const value = normalizeConsoleText(text);
+    if (!value) return;
 
     if (!consoleOutputElement) {
         consoleOutputElement = document.getElementById('console-output');
@@ -52,7 +69,6 @@ export function appendToConsole(text) {
     const target = consoleOutputElement;
     if (!target) return;
 
-    const value = String(text);
     target.textContent += value;
     if (!value.endsWith('\n')) {
         target.textContent += '\n';

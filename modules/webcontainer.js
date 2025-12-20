@@ -5,7 +5,7 @@ import { appendToConsole } from './preview.js';
 let webcontainerInstance = null;
 let devProcess = null;
 
-export function initializeWebcontainer() {
+export async function initializeWebcontainer() {
   const runBtn = document.getElementById('run-btn');
   if (runBtn) {
     runBtn.addEventListener('click', async () => {
@@ -43,6 +43,15 @@ export function initializeWebcontainer() {
         appendToConsole(`[error] ${err?.message ?? String(err)}\n`);
       }
     });
+  }
+
+  // Auto-boot WebContainer and sync files on page load
+  try {
+    await bootWebContainer();
+    await syncProjectFiles();
+  } catch (err) {
+    console.error('WebContainer boot error:', err);
+    appendToConsole(`[webcontainer] boot failed: ${err?.message ?? String(err)}\n`);
   }
 }
 

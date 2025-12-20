@@ -7,22 +7,43 @@ let devProcess = null;
 
 export function initializeWebcontainer() {
   const runBtn = document.getElementById('run-btn');
-  if (!runBtn) return;
+  if (runBtn) {
+    runBtn.addEventListener('click', async () => {
+      try {
+        runBtn.setAttribute('aria-busy', 'true');
+        await bootWebContainer();
+        await syncProjectFiles();
+        await installDepsIfNeeded();
+        await startDevServer();
+      } catch (err) {
+        console.error('WebContainer error:', err);
+        alert('WebContainer error: ' + (err?.message ?? err));
+      } finally {
+        runBtn.removeAttribute('aria-busy');
+      }
+    });
+  }
 
-  runBtn.addEventListener('click', async () => {
-    try {
-      runBtn.setAttribute('aria-busy', 'true');
-      await bootWebContainer();
-      await syncProjectFiles();
-      await installDepsIfNeeded();
-      await startDevServer();
-    } catch (err) {
-      console.error('WebContainer error:', err);
-      alert('WebContainer error: ' + (err?.message ?? err));
-    } finally {
-      runBtn.removeAttribute('aria-busy');
-    }
-  });
+  const consoleInput = document.getElementById('console-input');
+  if (consoleInput) {
+    consoleInput.addEventListener('keydown', async (event) => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+
+      const value = consoleInput.value.trim();
+      if (!value) return;
+
+      appendToConsole(`$ ${value}\n`);
+      consoleInput.value = '';
+
+      try {
+        await runCommand(value);
+      } catch (err) {
+        console.error('Command error:', err);
+        appendToConsole(`[error] ${err?.message ?? String(err)}\n`);
+      }
+    });
+  }
 }
 
 async function bootWebContainer() {
@@ -127,6 +148,28 @@ async function startDevServer() {
   devProcess = await webcontainerInstance.spawn('npm', ['run', 'dev']);
   // Drain output to keep process flowing
   drainOutput(devProcess);
+}
+
+async function runCommand(commandLine) {
+  await bootWebContainer();
+  await syncProjectFiles();
+
+  const parts = commandLine.split(' ').filter(Boolean);
+  if (!parts.length) return;
+
+  const [cmd, ...args] = parts;
+
+  let proc;
+  try {
+    proc = await webcontainerInstance.spawn(cmd, args);
+  } catch (err) {
+    appendToConsole(`[spawn error] ${err?.message ?? String(err)}\n`);
+    return;
+  }
+
+  await drainOutput(proc);
+  const exitCode = await proc.exit;
+  appendToConsole(`[process exited with code ${exitCode}]\n`);
 }
 
 async function drainOutput(proc) {

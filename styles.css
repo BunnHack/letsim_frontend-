@@ -776,6 +776,8 @@ body {
     height: 0;
     overflow: hidden;
     transition: height 0.2s ease;
+    display: flex;
+    flex-direction: column;
 }
 
 .console-panel.open {
@@ -789,12 +791,40 @@ body {
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: #a1a1aa;
+    flex-shrink: 0;
 }
 
 .console-body {
-    height: calc(100% - 24px);
+    flex: 1;
     padding: 4px 8px;
     overflow-y: auto;
+}
+
+.console-input-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px 6px;
+    border-top: 1px solid #27272a;
+    background-color: #050505;
+    flex-shrink: 0;
+}
+
+.console-prompt {
+    font-family: inherit;
+    color: #22c55e;
+    font-size: 12px;
+}
+
+.console-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: #e5e7eb;
+    font-family: inherit;
+    font-size: 12px;
+    padding: 3px 0;
 }
 
 .console-output {

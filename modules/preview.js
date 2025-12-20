@@ -20,6 +20,13 @@ export function initializePreview() {
         consoleToggleButton.addEventListener('click', () => {
             consolePanelElement.classList.toggle('open');
             consoleToggleButton.classList.toggle('active');
+
+            if (consolePanelElement.classList.contains('open')) {
+                const input = document.getElementById('console-input');
+                if (input) {
+                    input.focus();
+                }
+            }
         });
     }
 }

@@ -1,7 +1,34 @@
+import { Terminal } from 'xterm';
+
 let previewFrameElement;
 let consoleOutputElement;
 let consolePanelElement;
 let consoleToggleButton;
+let terminalInstance;
+
+function ensureTerminal() {
+    if (terminalInstance) return;
+
+    if (!consoleOutputElement) {
+        consoleOutputElement = document.getElementById('console-output');
+        if (!consoleOutputElement) return;
+    }
+
+    terminalInstance = new Terminal({
+        convertEol: true,
+        fontSize: 12,
+        fontFamily: "Menlo, Monaco, 'Courier New', monospace",
+        theme: {
+            background: '#000000',
+            foreground: '#e5e7eb',
+            cursor: '#22c55e',
+            selection: '#4b556355'
+        }
+    });
+
+    terminalInstance.open(consoleOutputElement);
+    terminalInstance.write('\x1b[32mWebContainer console ready\x1b[0m\r\n');
+}
 
 /**
  * Initialize the preview pane with a simple default page.
@@ -15,6 +42,8 @@ export function initializePreview() {
     if (previewFrameElement) {
         setPreviewContent(defaultHtmlContent);
     }
+
+    ensureTerminal();
 
     if (consoleToggleButton && consolePanelElement) {
         consoleToggleButton.addEventListener('click', () => {
@@ -43,39 +72,13 @@ export function setPreviewContent(html) {
     }
 }
 
-function normalizeConsoleText(input) {
-    if (!input) return '';
-    let value = String(input);
-
-    // Strip ANSI escape sequences like "\x1B[1G", "\x1B[0K", etc.
-    value = value.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '');
-
-    // Handle carriage returns by keeping only the last segment on the line
-    if (value.includes('\r')) {
-        const segments = value.split('\r');
-        value = segments[segments.length - 1];
-    }
-
-    return value;
-}
-
 export function appendToConsole(text) {
-    const value = normalizeConsoleText(text);
-    if (!value) return;
+    if (!text) return;
 
-    if (!consoleOutputElement) {
-        consoleOutputElement = document.getElementById('console-output');
-    }
-    const target = consoleOutputElement;
-    if (!target) return;
+    ensureTerminal();
+    if (!terminalInstance) return;
 
-    target.textContent += value;
-    if (!value.endsWith('\n')) {
-        target.textContent += '\n';
-    }
-
-    const container = target.parentElement || target;
-    container.scrollTop = container.scrollHeight;
+    terminalInstance.write(String(text));
 }
 
 const defaultHtmlContent = `

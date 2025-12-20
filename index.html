@@ -5,10 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Interface Clone</title>
     <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm/css/xterm.css">
     <script type="importmap">
     {
       "imports": {
-        "@webcontainer/api": "https://esm.sh/@webcontainer/api@1.1.8"
+        "@webcontainer/api": "https://esm.sh/@webcontainer/api@1.1.8",
+        "xterm": "https://esm.sh/xterm@5.3.0"
       }
     }
     </script>
@@ -303,7 +305,7 @@
                     <div class="console-panel" id="console-panel">
                         <div class="console-header">Console</div>
                         <div class="console-body">
-                            <pre class="console-output" id="console-output"></pre>
+                            <div class="console-output" id="console-output"></div>
                         </div>
                         <div class="console-input-bar">
                             <span class="console-prompt">$</span>

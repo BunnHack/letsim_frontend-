@@ -159,12 +159,16 @@ async function startDevServer() {
   drainOutput(devProcess);
 }
 
-async function runCommand(commandLine) {
+export async function runCommand(commandLine, options = {}) {
+  const { onOutput } = options || {};
+
   await bootWebContainer();
   await syncProjectFiles();
 
   const parts = commandLine.split(' ').filter(Boolean);
-  if (!parts.length) return;
+  if (!parts.length) {
+    return { success: true, exitCode: 0, output: '' };
+  }
 
   const [cmd, ...args] = parts;
 
@@ -172,16 +176,46 @@ async function runCommand(commandLine) {
   try {
     proc = await webcontainerInstance.spawn(cmd, args);
   } catch (err) {
-    appendToConsole(`[spawn error] ${err?.message ?? String(err)}\n`);
-    return;
+    const msg = `[spawn error] ${err?.message ?? String(err)}\n`;
+    appendToConsole(msg);
+    if (typeof onOutput === 'function') {
+      try {
+        onOutput(msg);
+      } catch (e) {
+        console.error('runCommand onOutput error:', e);
+      }
+    }
+    return { success: false, exitCode: null, output: msg };
   }
 
-  await drainOutput(proc);
+  let output = '';
+  await drainOutput(proc, (text) => {
+    output += text;
+    if (typeof onOutput === 'function') {
+      try {
+        onOutput(text);
+      } catch (e) {
+        console.error('runCommand onOutput error:', e);
+      }
+    }
+  });
+
   const exitCode = await proc.exit;
-  appendToConsole(`[process exited with code ${exitCode}]\n`);
+  const exitLine = `[process exited with code ${exitCode}]\n`;
+  appendToConsole(exitLine);
+  if (typeof onOutput === 'function') {
+    try {
+      onOutput(exitLine);
+    } catch (e) {
+      console.error('runCommand onOutput error:', e);
+    }
+  }
+  output += exitLine;
+
+  return { success: exitCode === 0, exitCode, output };
 }
 
-async function drainOutput(proc) {
+async function drainOutput(proc, onChunk) {
   if (!proc?.output || typeof proc.output.getReader !== 'function') return;
 
   const reader = proc.output.getReader();
@@ -206,6 +240,13 @@ async function drainOutput(proc) {
 
       console.log(text);
       appendToConsole(text);
+      if (typeof onChunk === 'function') {
+        try {
+          onChunk(text);
+        } catch (e) {
+          console.error('drainOutput onChunk error:', e);
+        }
+      }
     }
   } finally {
     try {

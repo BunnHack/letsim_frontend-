@@ -82,24 +82,38 @@ export function initializeChat() {
         messageHistory.push({ role: "user", content: text });
         chatInput.value = '';
         
-        const aiMsg = addMessage("Thinking...", false);
+        const aiMsg = addMessage("", false);
         const aiContent = aiMsg.querySelector('.message-content');
-        
+
+        let aiTextEl = aiContent;
+        let toolsContainerEl = null;
+
+        if (aiContent) {
+            aiContent.innerHTML = `
+                <div class="assistant-main-text">Thinking...</div>
+                <div class="assistant-tools"></div>
+            `;
+            aiTextEl = aiContent.querySelector('.assistant-main-text') || aiContent;
+            toolsContainerEl = aiContent.querySelector('.assistant-tools');
+        }
+
         try {
-            await runChatLoopWithTools(aiContent);
+            await runChatLoopWithTools(aiTextEl, toolsContainerEl);
         } catch (error) {
             console.error("Chat Error:", error);
-            aiContent.textContent = "Error: " + error.message;
-            if (error.message.includes("Failed to fetch")) {
-                aiContent.textContent += "\n(Ensure the Deno server is running on http://localhost:8000)";
+            if (aiTextEl) {
+                aiTextEl.textContent = "Error: " + error.message;
+                if (error.message.includes("Failed to fetch")) {
+                    aiTextEl.textContent += "\n(Ensure the Deno server is running on http://localhost:8000)";
+                }
             }
         }
     }
 
-    async function runChatLoopWithTools(aiContent) {
+    async function runChatLoopWithTools(aiTextEl, toolsContainerEl) {
         // Allow a couple of tool -> model iterations to satisfy tool calls.
         for (let i = 0; i < 3; i++) {
-            const result = await callModelOnce(aiContent);
+            const result = await callModelOnce(aiTextEl);
 
             if (result.type === 'tool_call' && result.toolCalls.length) {
                 // Record the assistant tool-call message.
@@ -115,7 +129,7 @@ export function initializeChat() {
                     }))
                 });
 
-                await executeToolCalls(result.toolCalls);
+                await executeToolCalls(result.toolCalls, toolsContainerEl);
                 // Loop again so the model can see tool outputs.
                 continue;
             }
@@ -129,7 +143,7 @@ export function initializeChat() {
         }
     }
 
-    async function callModelOnce(aiContent) {
+    async function callModelOnce(aiTextEl) {
         const response = await fetch("https://bunnhack-letsim-back-18.deno.dev/api/chat", { //don't remove the server url
             method: "POST",
             headers: {
@@ -156,7 +170,9 @@ export function initializeChat() {
         let toolCalls = [];
         let sawToolCalls = false;
 
-        aiContent.textContent = "";
+        if (aiTextEl) {
+            aiTextEl.textContent = "";
+        }
 
         while (true) {
             const { done, value } = await reader.read();
@@ -184,8 +200,10 @@ export function initializeChat() {
                     // Streaming assistant text content
                     if (typeof delta.content === "string") {
                         fullText += delta.content;
-                        aiContent.innerHTML = escapeHtml(fullText);
-                        chatMessages.scrollTop = chatMessages.scrollHeight;
+                        if (aiTextEl) {
+                            aiTextEl.textContent = fullText;
+                            chatMessages.scrollTop = chatMessages.scrollHeight;
+                        }
                     }
 
                     // Streaming tool calls
@@ -218,14 +236,16 @@ export function initializeChat() {
         }
 
         if (sawToolCalls && !fullText) {
-            aiContent.textContent = "Running tools...";
+            if (aiTextEl) {
+                aiTextEl.textContent = "Running tools...";
+            }
             return { type: "tool_call", content: "", toolCalls };
         }
 
         return { type: "assistant", content: fullText, toolCalls: [] };
     }
 
-    async function executeToolCalls(toolCalls) {
+    async function executeToolCalls(toolCalls, toolsContainerEl) {
         for (const tc of toolCalls) {
             const fn = tc.function || {};
             const name = fn.name;
@@ -242,11 +262,42 @@ export function initializeChat() {
                 const command = args.command || args.cmd || "";
                 if (!command) continue;
 
-                // Show the command in the chat for transparency.
-                addMessage(`$ ${command}`, false);
-
                 try {
-                    const result = await runCommand(command);
+                    let result;
+
+                    if (toolsContainerEl) {
+                        const block = document.createElement('div');
+                        block.className = 'chat-tool-block';
+                        block.innerHTML = `
+                            <div class="chat-tool-header">
+                                <span class="chat-tool-label">Terminal</span>
+                                <span class="chat-tool-command">$ ${escapeHtml(command)}</span>
+                            </div>
+                            <pre class="chat-console-output"></pre>
+                        `;
+                        toolsContainerEl.appendChild(block);
+                        chatMessages.scrollTop = chatMessages.scrollHeight;
+
+                        const outputEl = block.querySelector('.chat-console-output');
+                        let streamed = "";
+
+                        result = await runCommand(command, {
+                            onOutput(chunk) {
+                                if (!chunk) return;
+                                streamed += chunk;
+                                if (outputEl) {
+                                    outputEl.textContent = streamed;
+                                    outputEl.scrollTop = outputEl.scrollHeight;
+                                }
+                                chatMessages.scrollTop = chatMessages.scrollHeight;
+                            }
+                        });
+                    } else {
+                        // Fallback: just show the command as a separate assistant message.
+                        addMessage(`$ ${command}`, false);
+                        result = await runCommand(command);
+                    }
+
                     const content = [
                         `Command: ${command}`,
                         `Exit code: ${result.exitCode}`,

@@ -347,6 +347,62 @@ body {
     color: #e4e4e7;
 }
 
+.assistant-main-text {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+.assistant-tools {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.chat-tool-block {
+    background-color: #09090b;
+    border-radius: 8px;
+    border: 1px solid #27272a;
+    padding: 8px;
+    font-family: 'JetBrains Mono', 'Fira Code', Menlo, Monaco, 'Courier New', monospace;
+    font-size: 11px;
+    max-height: 160px;
+    overflow: hidden;
+}
+
+.chat-tool-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 11px;
+    color: #a1a1aa;
+}
+
+.chat-tool-label {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 600;
+}
+
+.chat-tool-command {
+    font-family: inherit;
+    color: #e5e7eb;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.chat-console-output {
+    margin-top: 4px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-y: auto;
+    max-height: 120px;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+}
+
 .chat-input-container {
     padding: 16px;
     border-top: 1px solid var(--border-color);

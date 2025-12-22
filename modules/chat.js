@@ -82,68 +82,55 @@ export function initializeChat() {
         messageHistory.push({ role: "user", content: text });
         chatInput.value = '';
         
-        const aiMsg = addMessage("", false);
+        const aiMsg = addMessage("Thinking...", false);
         const aiContent = aiMsg.querySelector('.message-content');
-
-        let aiTextEl = aiContent;
-        let toolsContainerEl = null;
-
-        if (aiContent) {
-            aiContent.innerHTML = `
-                <div class="assistant-main-text">Thinking...</div>
-                <div class="assistant-tools"></div>
-            `;
-            aiTextEl = aiContent.querySelector('.assistant-main-text') || aiContent;
-            toolsContainerEl = aiContent.querySelector('.assistant-tools');
-        }
-
+        
         try {
-            await runChatLoopWithTools(aiTextEl, toolsContainerEl);
+            await runChatLoopWithTools(aiContent);
         } catch (error) {
             console.error("Chat Error:", error);
-            if (aiTextEl) {
-                aiTextEl.textContent = "Error: " + error.message;
-                if (error.message.includes("Failed to fetch")) {
-                    aiTextEl.textContent += "\n(Ensure the Deno server is running on http://localhost:8000)";
-                }
+            aiContent.textContent = "Error: " + error.message;
+            if (error.message.includes("Failed to fetch")) {
+                aiContent.textContent += "\n(Ensure the Deno server is running on http://localhost:8000)";
             }
         }
     }
 
-    async function runChatLoopWithTools(aiTextEl, toolsContainerEl) {
-        // Allow a couple of tool -> model iterations to satisfy tool calls.
-        for (let i = 0; i < 3; i++) {
-            const result = await callModelOnce(aiTextEl);
+    async function runChatLoopWithTools(initialAiContentElement) {
+        const result = await callModelOnce(initialAiContentElement);
 
-            if (result.type === 'tool_call' && result.toolCalls.length) {
-                // Record the assistant tool-call message.
-                messageHistory.push({
-                    role: "assistant",
-                    tool_calls: result.toolCalls.map(tc => ({
-                        id: tc.id,
-                        type: "function",
-                        function: {
-                            name: tc.function?.name || "",
-                            arguments: tc.function?.arguments || ""
-                        }
-                    }))
-                });
-
-                await executeToolCalls(result.toolCalls, toolsContainerEl);
-                // Loop again so the model can see tool outputs.
-                continue;
+        if (result.type === 'tool_call' && result.toolCalls.length) {
+            // Record the assistant tool-call message.
+            const assistantMsg = {
+                role: "assistant",
+                tool_calls: result.toolCalls.map(tc => ({
+                    id: tc.id,
+                    type: "function",
+                    function: {
+                        name: tc.function?.name || "",
+                        arguments: tc.function?.arguments || ""
+                    }
+                }))
+            };
+            // If there was text content along with the tool call, include it
+            if (result.content) {
+                assistantMsg.content = result.content;
             }
+            messageHistory.push(assistantMsg);
 
-            const content = result.content || "";
-            if (content) {
-                handleAiGeneratedCodeFromText(content);
-                messageHistory.push({ role: "assistant", content });
-            }
-            break;
+            await executeToolCalls(result.toolCalls);
+            // Stop here to prevent a second API call. The tool output is recorded in history for the next turn.
+            return;
+        }
+
+        const content = result.content || "";
+        if (content) {
+            handleAiGeneratedCodeFromText(content);
+            messageHistory.push({ role: "assistant", content });
         }
     }
 
-    async function callModelOnce(aiTextEl) {
+    async function callModelOnce(aiContent) {
         const response = await fetch("https://bunnhack-letsim-back-18.deno.dev/api/chat", { //don't remove the server url
             method: "POST",
             headers: {
@@ -170,9 +157,8 @@ export function initializeChat() {
         let toolCalls = [];
         let sawToolCalls = false;
 
-        if (aiTextEl) {
-            aiTextEl.textContent = "";
-        }
+        // Only clear "Thinking..." if we haven't started streaming yet
+        aiContent.textContent = "";
 
         while (true) {
             const { done, value } = await reader.read();
@@ -200,10 +186,8 @@ export function initializeChat() {
                     // Streaming assistant text content
                     if (typeof delta.content === "string") {
                         fullText += delta.content;
-                        if (aiTextEl) {
-                            aiTextEl.textContent = fullText;
-                            chatMessages.scrollTop = chatMessages.scrollHeight;
-                        }
+                        aiContent.innerHTML = escapeHtml(fullText);
+                        chatMessages.scrollTop = chatMessages.scrollHeight;
                     }
 
                     // Streaming tool calls
@@ -235,17 +219,18 @@ export function initializeChat() {
             }
         }
 
-        if (sawToolCalls && !fullText) {
-            if (aiTextEl) {
-                aiTextEl.textContent = "Running tools...";
+        if (sawToolCalls) {
+            // If there's no text, give a small indicator
+            if (!fullText) {
+                aiContent.textContent = "Running command...";
             }
-            return { type: "tool_call", content: "", toolCalls };
+            return { type: "tool_call", content: fullText, toolCalls };
         }
 
         return { type: "assistant", content: fullText, toolCalls: [] };
     }
 
-    async function executeToolCalls(toolCalls, toolsContainerEl) {
+    async function executeToolCalls(toolCalls) {
         for (const tc of toolCalls) {
             const fn = tc.function || {};
             const name = fn.name;
@@ -262,41 +247,31 @@ export function initializeChat() {
                 const command = args.command || args.cmd || "";
                 if (!command) continue;
 
+                // Create a container for the streaming output
+                const msgElement = document.createElement('div');
+                msgElement.className = 'message ai';
+                msgElement.innerHTML = `
+                    <div class="message-content">
+                        <div class="command-header">
+                            <span class="command-prompt">$</span> ${escapeHtml(command)}
+                        </div>
+                        <div class="command-output"></div>
+                    </div>
+                `;
+                chatMessages.appendChild(msgElement);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+
+                const outputElement = msgElement.querySelector('.command-output');
+
                 try {
-                    let result;
-
-                    if (toolsContainerEl) {
-                        const block = document.createElement('div');
-                        block.className = 'chat-tool-block';
-                        block.innerHTML = `
-                            <div class="chat-tool-header">
-                                <span class="chat-tool-label">Terminal</span>
-                                <span class="chat-tool-command">$ ${escapeHtml(command)}</span>
-                            </div>
-                            <pre class="chat-console-output"></pre>
-                        `;
-                        toolsContainerEl.appendChild(block);
-                        chatMessages.scrollTop = chatMessages.scrollHeight;
-
-                        const outputEl = block.querySelector('.chat-console-output');
-                        let streamed = "";
-
-                        result = await runCommand(command, {
-                            onOutput(chunk) {
-                                if (!chunk) return;
-                                streamed += chunk;
-                                if (outputEl) {
-                                    outputEl.textContent = streamed;
-                                    outputEl.scrollTop = outputEl.scrollHeight;
-                                }
-                                chatMessages.scrollTop = chatMessages.scrollHeight;
-                            }
-                        });
-                    } else {
-                        // Fallback: just show the command as a separate assistant message.
-                        addMessage(`$ ${command}`, false);
-                        result = await runCommand(command);
-                    }
+                    const result = await runCommand(command, {
+                        onOutput: (text) => {
+                            // Strip ANSI codes for clean display in chat
+                            const cleanText = text.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
+                            outputElement.textContent += cleanText;
+                            outputElement.scrollTop = outputElement.scrollHeight;
+                        }
+                    });
 
                     const content = [
                         `Command: ${command}`,
@@ -313,6 +288,8 @@ export function initializeChat() {
                     });
                 } catch (err) {
                     const errorText = `run_command error: ${err?.message || String(err)}`;
+                    outputElement.textContent += `\nError: ${errorText}`;
+                    
                     messageHistory.push({
                         role: "tool",
                         tool_call_id: tc.id,

@@ -347,16 +347,24 @@ body {
     color: #e4e4e7;
 }
 
-.command-header {
-    font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
-    font-weight: 600;
-    color: #e4e4e7;
-    margin-bottom: 8px;
-    border-bottom: 1px solid #3f3f46;
-    padding-bottom: 6px;
+.message.ai .message-content.terminal-message {
+    background-color: #0c0c0e;
+    border: 1px solid #27272a;
+    padding: 10px;
+    font-family: 'JetBrains Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
+    min-width: 200px;
+    white-space: normal;
+}
+
+.command-source {
     display: flex;
     align-items: center;
     gap: 8px;
+    color: #e4e4e7;
+    font-weight: 600;
+    font-size: 12px;
+    margin-bottom: 4px;
+    white-space: pre-wrap;
 }
 
 .command-prompt {
@@ -364,8 +372,8 @@ body {
     user-select: none;
 }
 
-.command-output {
-    font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+.command-output-text {
+    font-family: 'JetBrains Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
     font-size: 12px;
     color: #d4d4d4;
     white-space: pre-wrap;
@@ -373,10 +381,9 @@ body {
     max-height: 300px;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    background-color: #121214;
-    padding: 8px;
-    border-radius: 4px;
-    margin-top: 4px;
+    padding: 0;
+    margin: 0;
+    line-height: 1.4;
 }
 
 .chat-input-container {
@@ -925,6 +932,68 @@ body {
 .logo-faded {
     margin-bottom: 20px;
     opacity: 0.1;
+}
+
+/* Tool approval card */
+.approval-card {
+    background-color: #101012;
+    border: 1px solid #27272a;
+    border-radius: 8px;
+    padding: 10px 12px;
+}
+
+.approval-title {
+    font-weight: 600;
+    color: #e4e4e7;
+    margin-bottom: 8px;
+    font-size: 12px;
+}
+
+.approval-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+
+.approval-item {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    font-family: 'JetBrains Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
+    font-size: 12px;
+    color: #d4d4d4;
+}
+
+.approval-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.approval-btn {
+    min-width: 44px;
+    min-height: 36px;
+    padding: 8px 12px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    background: #27272a;
+    color: #e4e4e7;
+}
+
+.approval-btn.approve {
+    background: #22c55e33;
+    color: #22c55e;
+}
+
+.approval-btn.deny {
+    background: #ef444433;
+    color: #ef4444;
+}
+
+.approval-btn:disabled {
+    opacity: 0.6;
+    cursor: default;
 }
 
 /* Mobile Responsiveness Improvements */

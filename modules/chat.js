@@ -74,6 +74,50 @@ export function initializeChat() {
         return msg;
     }
 
+    // Request approval from user before executing tool calls
+    function requestToolApproval(toolCalls) {
+        return new Promise((resolve) => {
+            const commands = toolCalls.map(tc => {
+                let cmd = '';
+                try {
+                    const argsStr = tc.function?.arguments || "";
+                    const parsed = JSON.parse(argsStr);
+                    cmd = parsed.command || parsed.cmd || "";
+                } catch (_) {}
+                return cmd;
+            }).filter(Boolean);
+
+            const msg = document.createElement('div');
+            msg.className = 'message ai';
+            msg.innerHTML = `
+                <div class="message-content approval-card">
+                    <div class="approval-title">Allow tool to run?</div>
+                    <div class="approval-list">
+                        ${commands.map(c => `<div class="approval-item"><span class="command-prompt">$</span> ${escapeHtml(c)}</div>`).join('') || '<div class="approval-item">This action requires permission.</div>'}
+                    </div>
+                    <div class="approval-actions">
+                        <button class="approval-btn approve">Allow</button>
+                        <button class="approval-btn deny">Deny</button>
+                    </div>
+                </div>
+            `;
+            chatMessages.appendChild(msg);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+
+            const approveBtn = msg.querySelector('.approve');
+            const denyBtn = msg.querySelector('.deny');
+
+            const settle = (val) => {
+                approveBtn.disabled = true;
+                denyBtn.disabled = true;
+                resolve(val);
+            };
+
+            approveBtn.addEventListener('click', () => settle(true));
+            denyBtn.addEventListener('click', () => settle(false));
+        });
+    }
+
     async function handleSend() {
         const text = chatInput.value.trim();
         if (!text) return;
@@ -97,13 +141,14 @@ export function initializeChat() {
     }
 
     async function runChatLoopWithTools(initialAiContentElement) {
-        const result = await callModelOnce(initialAiContentElement);
+        // First call: let the model propose tools
+        const first = await callModelOnce(initialAiContentElement);
 
-        if (result.type === 'tool_call' && result.toolCalls.length) {
-            // Record the assistant tool-call message.
+        if (first.type === 'tool_call' && first.toolCalls.length) {
+            // Record the assistant tool-call message
             const assistantMsg = {
                 role: "assistant",
-                tool_calls: result.toolCalls.map(tc => ({
+                tool_calls: first.toolCalls.map(tc => ({
                     id: tc.id,
                     type: "function",
                     function: {
@@ -112,37 +157,89 @@ export function initializeChat() {
                     }
                 }))
             };
-            // If there was text content along with the tool call, include it
-            if (result.content) {
-                assistantMsg.content = result.content;
-            }
+            if (first.content) assistantMsg.content = first.content;
             messageHistory.push(assistantMsg);
 
-            await executeToolCalls(result.toolCalls);
-            // Stop here to prevent a second API call. The tool output is recorded in history for the next turn.
+            // Ask user for approval
+            const approved = await requestToolApproval(first.toolCalls);
+
+            // Log explicit approval/denial message to history
+            messageHistory.push({
+                role: "user",
+                content: JSON.stringify({
+                    type: "tool-approval-response",
+                    decision: approved ? "approved" : "denied",
+                    tool_calls: first.toolCalls.map(tc => ({
+                        id: tc.id,
+                        name: tc.function?.name || "",
+                        arguments: tc.function?.arguments || ""
+                    }))
+                })
+            });
+
+            // Small user bubble reflecting the decision
+            addMessage(approved ? "Approved tool run" : "Denied tool run", true);
+
+            // Second call: model reacts to approval/denial
+            const followMsg = addMessage("Thinking...", false);
+            const followContent = followMsg.querySelector('.message-content');
+            const second = await callModelOnce(followContent);
+
+            if (second.type === 'tool_call' && second.toolCalls.length) {
+                const assistantMsg2 = {
+                    role: "assistant",
+                    tool_calls: second.toolCalls.map(tc => ({
+                        id: tc.id,
+                        type: "function",
+                        function: {
+                            name: tc.function?.name || "",
+                            arguments: tc.function?.arguments || ""
+                        }
+                    }))
+                };
+                if (second.content) assistantMsg2.content = second.content;
+                messageHistory.push(assistantMsg2);
+
+                // Only run tools if approved
+                if (approved) {
+                    await executeToolCalls(second.toolCalls);
+                }
+                return;
+            }
+
+            const text2 = second.content || "";
+            if (text2) {
+                handleAiGeneratedCodeFromText(text2);
+                messageHistory.push({ role: "assistant", content: text2 });
+            }
             return;
         }
 
-        const content = result.content || "";
+        // No tools proposed; just render content
+        const content = first.content || "";
         if (content) {
             handleAiGeneratedCodeFromText(content);
             messageHistory.push({ role: "assistant", content });
         }
     }
 
-    async function callModelOnce(aiContent) {
+    async function callModelOnce(aiContent, { allowTools = true } = {}) {
+        const payload = {
+            model: models[currentModelIndex].id,
+            messages: messageHistory,
+            stream: true,
+            tool_choice: allowTools ? "auto" : "none"
+        };
+        if (allowTools) {
+            payload.tools = tools;
+        }
+
         const response = await fetch("https://bunnhack-letsim-back-18.deno.dev/api/chat", { //don't remove the server url
             method: "POST",
             headers: {
                 "Content-Type": "application/json"
             },
-            body: JSON.stringify({
-                model: models[currentModelIndex].id,
-                messages: messageHistory,
-                stream: true,
-                tools,
-                tool_choice: "auto"
-            })
+            body: JSON.stringify(payload)
         });
 
         if (!response.ok) {
@@ -190,8 +287,8 @@ export function initializeChat() {
                         chatMessages.scrollTop = chatMessages.scrollHeight;
                     }
 
-                    // Streaming tool calls
-                    if (Array.isArray(delta.tool_calls) && delta.tool_calls.length) {
+                    // Streaming tool calls (only used when tools are enabled)
+                    if (allowTools && Array.isArray(delta.tool_calls) && delta.tool_calls.length) {
                         sawToolCalls = true;
                         delta.tool_calls.forEach((tcDelta, index) => {
                             const existing = toolCalls[index] || {
@@ -219,7 +316,7 @@ export function initializeChat() {
             }
         }
 
-        if (sawToolCalls) {
+        if (allowTools && sawToolCalls) {
             // If there's no text, give a small indicator
             if (!fullText) {
                 aiContent.textContent = "Running command...";
@@ -250,18 +347,11 @@ export function initializeChat() {
                 // Create a container for the streaming output
                 const msgElement = document.createElement('div');
                 msgElement.className = 'message ai';
-                msgElement.innerHTML = `
-                    <div class="message-content">
-                        <div class="command-header">
-                            <span class="command-prompt">$</span> ${escapeHtml(command)}
-                        </div>
-                        <div class="command-output"></div>
-                    </div>
-                `;
+                msgElement.innerHTML = `<div class="message-content terminal-message"><div class="command-source"><span class="command-prompt">$</span> ${escapeHtml(command)}</div><div class="command-output-text"></div></div>`;
                 chatMessages.appendChild(msgElement);
                 chatMessages.scrollTop = chatMessages.scrollHeight;
 
-                const outputElement = msgElement.querySelector('.command-output');
+                const outputElement = msgElement.querySelector('.command-output-text');
 
                 try {
                     const result = await runCommand(command, {
@@ -288,7 +378,7 @@ export function initializeChat() {
                     });
                 } catch (err) {
                     const errorText = `run_command error: ${err?.message || String(err)}`;
-                    outputElement.textContent += `\nError: ${errorText}`;
+                    outputElement.textContent += (outputElement.textContent ? '\n' : '') + `Error: ${errorText}`;
                     
                     messageHistory.push({
                         role: "tool",
@@ -297,6 +387,24 @@ export function initializeChat() {
                         content: errorText
                     });
                 }
+            }
+        }
+
+        // After all tools have run, ask the model to respond based on the new tool output
+        if (toolCalls.length) {
+            const followMsg = addMessage("Thinking...", false);
+            const followContent = followMsg.querySelector('.message-content');
+
+            try {
+                const next = await callModelOnce(followContent, { allowTools: false });
+                const text = next.content || "";
+                if (text) {
+                    handleAiGeneratedCodeFromText(text);
+                    messageHistory.push({ role: "assistant", content: text });
+                }
+            } catch (err) {
+                console.error("Follow-up chat error:", err);
+                followContent.textContent = "Error: " + (err?.message || String(err));
             }
         }
     }
